@@ -125,7 +125,7 @@ export default function ChatPage() {
 
     // Mensaje fallback UX
     await addDoc(collection(db, "messages"), {
-      text: "Error al conectar con el servidor 🤖",
+      text: "Error al conectar con el servidor ",
       user: "bot",
       createdAt: serverTimestamp(),
     });
