@@ -30,6 +30,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 import { useChatStore } from "@/app/lib/store/useChatStore";
+import { where } from "firebase/firestore";
 
 export default function ChatPage() {
   const { messages, setMessages, setUser } = useChatStore();
@@ -55,16 +56,34 @@ export default function ChatPage() {
 
   // 2. ESCUCHAR MENSAJES EN TIEMPO REAL
   useEffect(() => {
-    const q = query(collection(db, "messages"), orderBy("createdAt", "asc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+  let unsubscribeMessages: (() => void) | null = null;
+
+  const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+    if (!user) return;
+
+    const q = query(
+      collection(db, "messages"),
+      where("userId", "==", user.uid),
+      orderBy("createdAt", "asc")
+    );
+
+    // limpiar listener anterior si existe
+    if (unsubscribeMessages) unsubscribeMessages();
+
+    unsubscribeMessages = onSnapshot(q, (snapshot) => {
       const msgs = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }));
       setMessages(msgs);
     });
-    return () => unsubscribe();
-  }, [setMessages]);
+  });
+
+  return () => {
+    unsubscribeAuth();
+    if (unsubscribeMessages) unsubscribeMessages();
+  };
+}, [setMessages]);
 
   // 3. AUTO-SCROLL
   useEffect(() => {
@@ -97,12 +116,14 @@ export default function ChatPage() {
 
     // Guardar mensaje del usuario
     await addDoc(collection(db, "messages"), {
-      text: userText,
-      user: currentUser.email,
-      createdAt: serverTimestamp(),
-    });
+  text: userText,
+  user: currentUser.email,
+  userId: currentUser.uid,
+  createdAt: serverTimestamp(),
+});
 
     // Llamar backend
+    console.log("API URL:", process.env.NEXT_PUBLIC_API_URL);
     const res = await axios.post(
       `${process.env.NEXT_PUBLIC_API_URL}/chat`,
       { message: userText },
@@ -115,10 +136,11 @@ export default function ChatPage() {
 
     // Guardar respuesta del bot
     await addDoc(collection(db, "messages"), {
-      text: res.data.reply || "No response from AI",
-      user: "bot",
-      createdAt: serverTimestamp(),
-    });
+  text: res.data.reply || "No response from AI",
+  user: "bot",
+  userId: currentUser.uid,
+  createdAt: serverTimestamp(),
+});
 
   } catch (error: any) {
     console.error("🔥 Error enviando mensaje:", error?.response || error);
@@ -127,6 +149,7 @@ export default function ChatPage() {
     await addDoc(collection(db, "messages"), {
       text: "Error al conectar con el servidor ",
       user: "bot",
+      userId: currentUser.uid,
       createdAt: serverTimestamp(),
     });
 
@@ -269,6 +292,7 @@ export default function ChatPage() {
             <div className="flex justify-start">
               <div className="bg-slate-800 p-3 rounded-2xl rounded-tl-none border border-slate-700">
                 <Loader2 size={18} className="animate-spin text-sky-400" />
+                 <span className="text-sm text-slate-400">Bot is typing...</span>
               </div>
             </div>
           )}

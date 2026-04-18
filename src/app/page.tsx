@@ -31,7 +31,7 @@ export default function Home() {
         </p>
 
         {/* Acciones */}
-        <div className="flex flex-col sm:flex-row justify-center gap-4">
+        <div className="flex flex-col sm:flex-row justify-center gap-4 mt-30">
           <button
             onClick={() => router.push("/login")}
             className="group relative bg-white text-black font-bold px-8 py-4 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(255,255,255,0.3)]"
@@ -48,12 +48,8 @@ export default function Home() {
         </div>
 
         {/* Footer Visual */}
-        <div className="mt-20 flex justify-center items-center gap-8 opacity-30 grayscale italic font-medium text-sm text-white">
-          <span>Rápido</span>
-          <span className="w-1 h-1 bg-white rounded-full"></span>
-          <span>Seguro</span>
-          <span className="w-1 h-1 bg-white rounded-full"></span>
-          <span>Minimalista</span>
+        <div className="mt-20 flex justify-center items-center gap-8  grayscale italic font-medium text-xl text-white">
+          
         </div>
       </div>
     </div>
