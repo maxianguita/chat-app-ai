@@ -63,6 +63,8 @@ export default function ChatPage() {
 
     const q = query(
       collection(db, "messages"),
+      
+      // mostrar solo mensajes del usuario
       where("userId", "==", user.uid),
       orderBy("createdAt", "asc")
     );
@@ -70,6 +72,7 @@ export default function ChatPage() {
     // limpiar listener anterior si existe
     if (unsubscribeMessages) unsubscribeMessages();
 
+     // escuchar mensajes en tiempo real
     unsubscribeMessages = onSnapshot(q, (snapshot) => {
       const msgs = snapshot.docs.map((doc) => ({
         id: doc.id,
