@@ -4,14 +4,14 @@ import { useState } from "react";
 import { auth } from "../lib/firebase";
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { useRouter } from "next/navigation";
-import { Mail, Lock, Loader2, KeyRound, X, ArrowRight } from "lucide-react";
+import { Mail, Lock, Loader2, KeyRound, X, ArrowRight, Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false); // Estado para alternar el ojito
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
 
   const [showReset, setShowReset] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
@@ -52,18 +52,18 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0f172a] relative overflow-hidden p-6">
       
-
       <div className="absolute top-[-10%] left-[-10%] w-72 h-72 bg-sky-500/20 rounded-full blur-[100px]" />
       <div className="absolute bottom-[-10%] right-[-10%] w-72 h-72 bg-indigo-500/20 rounded-full blur-[100px]" />
 
       <div className="relative w-full max-w-md">
         <div className="bg-white/95 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl p-10 border border-white/20">
           <div className="text-center mb-10">
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight italic">CHAT APP</h1>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight italic">Nova AI</h1>
             <p className="text-slate-500 mt-2 font-medium">Iniciá sesión para continuar</p>
           </div>
 
           <div className="space-y-4">
+            {/* INPUT EMAIL */}
             <div className="relative">
               <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
               <input
@@ -75,16 +75,24 @@ export default function LoginPage() {
               />
             </div>
 
+            {/* INPUT CONTRASEÑA + OJITO */}
             <div className="relative">
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 placeholder="Contraseña"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-                className="w-full pl-12 pr-4 py-4 rounded-2xl border border-slate-100 bg-slate-50 outline-none focus:ring-4 focus:ring-sky-500/10 focus:border-sky-500 transition-all placeholder:text-slate-400 text-black"
+                className="w-full pl-12 pr-12 py-4 rounded-2xl border border-slate-100 bg-slate-50 outline-none focus:ring-4 focus:ring-sky-500/10 focus:border-sky-500 transition-all placeholder:text-slate-400 text-black"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
             </div>
 
             {error && (
@@ -123,7 +131,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* MODAL PARA  RECUPERAR CONTRASEÑA */}
+      {/* MODAL PARA RECUPERAR CONTRASEÑA */}
       {showReset && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div 

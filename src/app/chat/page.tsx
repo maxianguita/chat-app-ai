@@ -19,12 +19,13 @@ import {
   Send, 
   Paperclip, 
   Smile, 
-  Menu,
   CheckCheck,
   Trash,
   LogOut,
   Loader2,
-  X
+  X,
+  User,
+  Bot
 } from "lucide-react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import axios from "axios";
@@ -38,9 +39,8 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false); 
-  const scrollRef = useRef(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
-  
 
   // 1. PROTEGER RUTA Y DETECTAR USUARIO
   useEffect(() => {
@@ -56,37 +56,33 @@ export default function ChatPage() {
 
   // 2. ESCUCHAR MENSAJES EN TIEMPO REAL
   useEffect(() => {
-  let unsubscribeMessages: (() => void) | null = null;
+    let unsubscribeMessages: (() => void) | null = null;
 
-  const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-    if (!user) return;
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      if (!user) return;
 
-    const q = query(
-      collection(db, "messages"),
-      
-      // mostrar solo mensajes del usuario
-      where("userId", "==", user.uid),
-      orderBy("createdAt", "asc")
-    );
+      const q = query(
+        collection(db, "messages"),
+        where("userId", "==", user.uid),
+        orderBy("createdAt", "asc")
+      );
 
-    // limpiar listener anterior si existe
-    if (unsubscribeMessages) unsubscribeMessages();
+      if (unsubscribeMessages) unsubscribeMessages();
 
-     // escuchar mensajes en tiempo real
-    unsubscribeMessages = onSnapshot(q, (snapshot) => {
-      const msgs = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setMessages(msgs);
+      unsubscribeMessages = onSnapshot(q, (snapshot) => {
+        const msgs = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setMessages(msgs);
+      });
     });
-  });
 
-  return () => {
-    unsubscribeAuth();
-    if (unsubscribeMessages) unsubscribeMessages();
-  };
-}, [setMessages]);
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeMessages) unsubscribeMessages();
+    };
+  }, [setMessages]);
 
   // 3. AUTO-SCROLL
   useEffect(() => {
@@ -97,69 +93,64 @@ export default function ChatPage() {
 
   // 4. ENVIAR MENSAJE
   const sendMessage = async () => {
-  if (!text.trim() || loading) return;
+    if (!text.trim() || loading) return;
 
-  const userText = text;
-  setText("");
-  setLoading(true);
+    const userText = text;
+    setText("");
+    setLoading(true);
 
-  try {
     const currentUser = auth.currentUser;
     if (!currentUser) {
-      console.error("User not authenticated");
+      console.error("Usuario no autenticado");
+      setLoading(false);
       return;
     }
 
-    if (!process.env.NEXT_PUBLIC_API_URL) {
-      console.error("API URL not defined");
-      return;
-    }
-
-    const token = await currentUser.getIdToken();
-
-    // Guardar mensaje del usuario
-    await addDoc(collection(db, "messages"), {
-  text: userText,
-  user: currentUser.email,
-  userId: currentUser.uid,
-  createdAt: serverTimestamp(),
-});
-
-    // Llamar backend
-    console.log("API URL:", process.env.NEXT_PUBLIC_API_URL);
-    const res = await axios.post(
-      `${process.env.NEXT_PUBLIC_API_URL}/chat`,
-      { message: userText },
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+    try {
+      if (!process.env.NEXT_PUBLIC_API_URL) {
+        console.error("API URL not defined");
+        return;
       }
-    );
 
-    // Guardar respuesta del bot
-    await addDoc(collection(db, "messages"), {
-  text: res.data.reply || "No response from AI",
-  user: "bot",
-  userId: currentUser.uid,
-  createdAt: serverTimestamp(),
-});
+      const token = await currentUser.getIdToken();
 
-  } catch (error: any) {
-    console.error("🔥 Error enviando mensaje:", error?.response || error);
+      await addDoc(collection(db, "messages"), {
+        text: userText,
+        user: currentUser.email,
+        userId: currentUser.uid,
+        createdAt: serverTimestamp(),
+      });
 
-    // Mensaje fallback UX
-    await addDoc(collection(db, "messages"), {
-      text: "Error al conectar con el servidor ",
-      user: "bot",
-      userId: currentUser.uid,
-      createdAt: serverTimestamp(),
-    });
+      const res = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL}/chat`,
+        { message: userText },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
-  } finally {
-    setLoading(false);
-  }
-};
+      await addDoc(collection(db, "messages"), {
+        text: res.data.reply || "No response from AI",
+        user: "bot",
+        userId: currentUser.uid,
+        createdAt: serverTimestamp(),
+      });
+    } catch (error: any) {
+      console.error("🔥 Error enviando mensaje:", error?.response || error);
+
+      await addDoc(collection(db, "messages"), {
+        text: "Error al conectar con el servidor",
+        user: "bot",
+        userId: currentUser.uid,
+        createdAt: serverTimestamp(),
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 5. LOGICA DE BORRADO CON MODAL
   const handleClearChat = async () => {
     try {
@@ -178,89 +169,104 @@ export default function ChatPage() {
   const handleLogout = () => signOut(auth);
 
   return (
-    <div className="flex h-screen bg-gray-700 overflow-hidden text-slate-200 font-sans">
+    <div className="flex h-screen bg-[#09090B] overflow-hidden text-zinc-200 font-sans">
       
       {/* --- SIDEBAR IZQUIERDO --- */}
-      <div className="hidden md:flex w-full max-w-[320px] border-r border-slate-800 flex-col bg-[#1e293b]/50 backdrop-blur-xl">
-        <div className="p-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-        
-            <h1 className="text-xl font-black tracking-tighter italic">CHAT APP</h1>
-          </div>
+      <div className="hidden md:flex w-full max-w-[320px] border-r border-zinc-900 flex-col bg-[#0f0f13]">
+        <div className="p-5 flex items-center justify-between">
+          <h1 className="text-lg font-medium tracking-wider text-zinc-100">Nova AI</h1>
         </div>
 
         <div className="px-4 pb-4">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" size={14} />
             <input 
               type="text" 
               placeholder="Buscar..." 
-              className="w-full bg-slate-900/50 border border-slate-700 py-2 pl-10 pr-4 rounded-xl text-sm outline-none"
+              className="w-full bg-zinc-900/50 border border-zinc-800 py-1.5 pl-9 pr-4 rounded-xl text-xs outline-none text-zinc-300 focus:border-zinc-700 transition-colors"
             />
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-          <div className="bg-sky-600 flex items-center gap-3 px-4 py-3 cursor-pointer">
-            <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center font-bold">AI</div>
+        <div className="flex-1 overflow-y-auto px-2">
+          {/* Item de Chat */}
+          <div className="bg-zinc-900/60 border border-zinc-800/60 rounded-2xl flex items-center gap-3 px-4 py-3.5 cursor-pointer transition-all hover:bg-zinc-900">
+            <div className="relative w-10 h-10 rounded-full bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-500 flex items-center justify-center font-bold text-xs text-white shadow-md shadow-blue-500/10">
+              AI
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-[#0f0f13] rounded-full"></span>
+            </div>
             <div className="flex-1 min-w-0">
               <div className="flex justify-between items-baseline">
-                <h3 className="font-bold truncate text-white">Asistente Bot</h3>
-                <span className="text-[10px] opacity-70 text-white">En línea</span>
+                <h3 className="font-medium text-sm text-zinc-200 truncate">Asistente Bot</h3>
+                <span className="text-[10px] text-zinc-500 font-light">Activo</span>
               </div>
-              <p className="text-sm truncate opacity-90 text-sky-100">Conversación activa</p>
+              <p className="text-xs truncate text-zinc-400 font-light mt-0.5">Conversación inteligente</p>
             </div>
           </div>
         </div>
         
-        <div className="p-4 border-t border-slate-800 flex items-center justify-between bg-slate-900/30">
-           <span className="text-xs text-slate-500 truncate max-w-[150px]">{auth.currentUser?.email}</span>
-           <button onClick={handleLogout} className="p-2 hover:bg-rose-500/10 text-rose-400 rounded-lg transition-all">
-              <LogOut size={18} />
+        <div className="p-4 border-t border-zinc-900 flex items-center justify-between bg-zinc-950/40">
+           <span className="text-xs text-zinc-500 truncate max-w-[150px] font-light">{auth.currentUser?.email}</span>
+           <button onClick={handleLogout} className="p-2 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 rounded-xl transition-all">
+              <LogOut size={15} />
            </button>
         </div>
       </div>
 
       {/* --- ÁREA DE CHAT --- */}
-      <div className="flex-1 flex flex-col relative bg-[#0f172a]">
-        <div className="absolute inset-0 bg-[url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')] opacity-[0.03] pointer-events-none"></div>
+      <div className="flex-1 flex flex-col relative bg-[#09090B]">
+        {/* Fondo sutil */}
+        <div className="absolute inset-0 bg-[radial-gradient(#18181b_1px,transparent_1px)] [background-size:16px_16px] opacity-30 pointer-events-none"></div>
 
-        {/* Header Chat */}
-        <div className="h-16 flex items-center justify-between px-6 bg-[#1e293b]/90 backdrop-blur-md border-b border-slate-800 z-30 relative">
+        {/* HEADER CHAT */}
+        <div className="h-16 flex items-center justify-between px-6 bg-[#09090B]/80 backdrop-blur-md border-b border-zinc-900 z-30 relative">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-tr from-sky-400 to-blue-600 rounded-full flex items-center justify-center font-bold text-white shadow-lg shadow-sky-500/20">
+            <div className="relative w-9 h-9 rounded-full bg-gradient-to-br from-cyan-400 via-sky-500 to-blue-600 flex items-center justify-center font-semibold text-xs text-white shadow-lg shadow-cyan-500/10">
               AI
             </div>
-            <div>
-              <h2 className="font-bold text-white leading-none text-sm md:text-base">Asistente Bot</h2>
-              <span className="text-xs text-sky-400">en línea</span>
+            <div className="relative">
+              <div className="absolute -inset-1 bg-gradient-to-r from-cyan-500/10 to-blue-500/10 rounded-lg blur-md"></div>
+              
+              <div className="relative">
+                <h2 className="font-medium text-zinc-100 text-sm tracking-wide flex items-center gap-1.5">
+                  Asistente Bot
+                  <span className="text-[9px] font-bold bg-cyan-500/10 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/20 uppercase tracking-wider">System</span>
+                </h2>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                  </span>
+                  <span className="text-[10px] text-zinc-400 font-light">Listo para ayudarte</span>
+                </div>
+              </div>
             </div>
           </div>
 
           <div className="relative">
             <button 
               onClick={() => setShowMenu(!showMenu)}
-              className={`p-2 rounded-full transition-colors ${showMenu ? "bg-slate-700 text-white" : "text-slate-400 hover:text-white"}`}
+              className={`p-2 rounded-full transition-colors ${showMenu ? "bg-zinc-900 text-white" : "text-zinc-400 hover:text-white"}`}
             >
-              <MoreVertical size={20} />
+              <MoreVertical size={18} />
             </button>
 
             {showMenu && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-                <div className="absolute right-0 mt-2 w-52 bg-[#1e293b] border border-slate-700 rounded-xl shadow-2xl z-50 py-2 animate-in fade-in zoom-in-95 duration-100 origin-top-right">
+                <div className="absolute right-0 mt-2 w-48 bg-zinc-950 border border-zinc-900 rounded-xl shadow-2xl z-50 py-1.5 text-xs animate-in fade-in zoom-in-95 duration-100 origin-top-right">
                   <button
                     onClick={() => { setShowMenu(false); setShowConfirm(true); }}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-rose-400 hover:bg-rose-500/10 transition-colors"
+                    className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-zinc-400 hover:text-rose-400 hover:bg-rose-500/5 transition-colors"
                   >
-                    <Trash size={16} />
+                    <Trash size={14} />
                     Limpiar historial
                   </button>
                   <button
                     onClick={handleLogout}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 transition-colors"
+                    className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 transition-colors"
                   >
-                    <LogOut size={16} />
+                    <LogOut size={14} />
                     Cerrar sesión
                   </button>
                 </div>
@@ -269,43 +275,65 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {/* Mensajes */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 relative z-10 custom-scrollbar">
-          {messages.map((msg) => {
+        {/* MENSAJES CON ICONOS DE USUARIO Y ROBOT */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 relative z-10 custom-scrollbar">
+          {messages.map((msg: any) => {
             const isUser = msg.user === auth.currentUser?.email;
             return (
-              <div key={msg.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-                <div className={`relative max-w-[85%] md:max-w-[70%] p-3 shadow-xl ${
+              <div key={msg.id} className={`flex items-end gap-3 ${isUser ? "justify-end" : "justify-start"}`}>
+                
+                {/* ICONO DEL ROBOT (Lado izquierdo si no es el usuario) */}
+                {!isUser && (
+                  <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-cyan-400 shrink-0 shadow-sm">
+                    <Bot size={15} strokeWidth={2} />
+                  </div>
+                )}
+
+                {/* BURBUJA DE MENSAJE */}
+                <div className={`relative max-w-[85%] md:max-w-[65%] p-3.5 ${
                   isUser 
-                    ? "bg-sky-600 text-white rounded-2xl rounded-tr-none" 
-                    : "bg-slate-800 text-slate-100 rounded-2xl rounded-tl-none border border-slate-700"
+                    ? "bg-zinc-100 text-zinc-900 rounded-2xl rounded-tr-none shadow-md" 
+                    : "bg-zinc-900/60 text-zinc-200 rounded-2xl rounded-tl-none border border-zinc-800/80"
                 }`}>
-                  <p className="text-sm md:text-base leading-relaxed">{msg.text}</p>
-                  <div className="flex items-center justify-end gap-1 mt-1 opacity-60">
-                    <span className="text-[10px]">
+                  <p className="text-sm leading-relaxed font-light">{msg.text}</p>
+                  <div className={`flex items-center justify-end gap-1 mt-1.5 opacity-40 text-[9px] ${isUser ? "text-zinc-800" : "text-zinc-400"}`}>
+                    <span>
                       {msg.createdAt?.toDate ? new Date(msg.createdAt.toDate()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--'}
                     </span>
-                    {isUser && <CheckCheck size={14} />}
+                    {isUser && <CheckCheck size={12} />}
                   </div>
                 </div>
+
+                {/* ICONO DEL USUARIO (Lado derecho si es el usuario) */}
+                {isUser && (
+                  <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-400 shrink-0 shadow-sm">
+                    <User size={15} strokeWidth={2} />
+                  </div>
+                )}
+
               </div>
             );
           })}
+
+          {/* INDICADOR DE CARGA AJUSTADO CON ICONO */}
           {loading && (
-            <div className="flex justify-start">
-              <div className="bg-slate-800 p-3 rounded-2xl rounded-tl-none border border-slate-700">
-                <Loader2 size={18} className="animate-spin text-sky-400" />
-                 <span className="text-sm text-slate-400">Bot is typing...</span>
+            <div className="flex items-end gap-3 justify-start">
+              <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-cyan-400 shrink-0">
+                <Bot size={15} className="animate-pulse" />
+              </div>
+              <div className="bg-zinc-900/40 border border-zinc-800/60 px-4 py-3 rounded-2xl rounded-tl-none flex items-center gap-2.5">
+                <Loader2 size={13} className="animate-spin text-cyan-400" />
+                <span className="text-xs text-zinc-400 font-light">Procesando respuesta...</span>
               </div>
             </div>
           )}
         </div>
 
-        {/* Input area */}
-        <div className="p-4 bg-[#1e293b]/90 backdrop-blur-md border-t border-slate-800 z-10">
-          <div className="max-w-4xl mx-auto flex items-center gap-3">
-            <button className="p-2 text-slate-400 hover:text-sky-400 transition-colors">
-              <Paperclip size={22} />
+        {/* INPUT AREA */}
+        <div className="p-4 bg-[#09090B]/80 backdrop-blur-md border-t border-zinc-900 z-10">
+          <div className="max-w-3xl mx-auto flex items-center gap-2">
+            <button className="p-2 text-zinc-500 hover:text-zinc-300 transition-colors">
+              <Paperclip size={18} />
             </button>
             <div className="flex-1 relative">
               <input 
@@ -313,59 +341,61 @@ export default function ChatPage() {
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                placeholder="Escribe un mensaje..."
-                className="w-full bg-slate-900 border border-slate-700 py-3 px-4 pr-12 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/40 transition-all text-sm text-white"
+                placeholder="Pregúntale algo a Nova AI..."
+                className="w-full bg-zinc-900/40 border border-zinc-800 py-2.5 px-4 pr-10 rounded-xl focus:outline-none focus:border-zinc-700 transition-all text-xs text-zinc-200 placeholder-zinc-500"
               />
-              <Smile size={20} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 cursor-pointer" />
+              <Smile size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 cursor-pointer hover:text-zinc-300 transition-colors" />
             </div>
             <button 
               onClick={sendMessage}
               disabled={!text.trim() || loading}
-              className={`p-3 rounded-xl transition-all ${
-                text.trim() && !loading ? "bg-sky-500 text-white scale-105 shadow-lg shadow-sky-500/20" : "bg-slate-700 text-slate-500"
+              className={`p-2.5 rounded-xl transition-all ${
+                text.trim() && !loading 
+                  ? "bg-zinc-100 text-zinc-900 hover:bg-white scale-105" 
+                  : "bg-zinc-900 text-zinc-600 cursor-not-allowed"
               }`}
             >
-              <Send size={20} />
+              <Send size={14} />
             </button>
           </div>
         </div>
       </div>
+
+      {/* MODAL DE CONFIRMACIÓN */}
       {showConfirm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div 
-            className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity"
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
             onClick={() => setShowConfirm(false)}
           />
 
-          <div className="relative w-full max-w-sm bg-[#1e293b] rounded-[2.5rem] p-8 shadow-2xl border border-slate-700 animate-in zoom-in-95 duration-200">
+          <div className="relative w-full max-w-xs bg-zinc-950 rounded-2xl p-6 shadow-2xl border border-zinc-900 animate-in zoom-in-95 duration-200 text-center">
             <button 
               onClick={() => setShowConfirm(false)}
-              className="absolute top-6 right-6 text-slate-500 hover:text-white transition-colors"
+              className="absolute top-4 right-4 text-zinc-500 hover:text-zinc-300 transition-colors"
             >
-              <X size={20} />
+              <X size={16} />
             </button>
 
-            <div className="w-16 h-16 bg-rose-500/10 rounded-2xl flex items-center justify-center mb-6 mx-auto">
-              <Trash className="w-8 h-8 text-rose-500" />
+            <div className="w-12 h-12 bg-rose-500/10 rounded-xl flex items-center justify-center mb-4 mx-auto">
+              <Trash className="w-5 h-5 text-rose-500" />
             </div>
 
-            <div className="text-center mb-8">
-              <h2 className="text-xl font-bold text-white">¿Limpiar chat?</h2>
-              <p className="text-slate-400 text-sm mt-3 leading-relaxed">
-                Esto eliminará todos los mensajes para siempre. Esta acción no se puede deshacer.
-              </p>
-            </div>
+            <h2 className="text-base font-medium text-zinc-100">¿Limpiar historial?</h2>
+            <p className="text-zinc-400 text-xs mt-2 leading-relaxed">
+              Esta acción eliminará de forma permanente todos tus mensajes actuales en la base de datos.
+            </p>
 
-            <div className="space-y-3">
+            <div className="mt-5 space-y-2">
               <button
                 onClick={handleClearChat}
-                className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-4 rounded-2xl shadow-lg shadow-rose-600/20 active:scale-[0.98] transition-all"
+                className="w-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium py-2.5 rounded-xl transition-colors"
               >
-                Eliminar todo
+                Confirmar eliminación
               </button>
               <button
                 onClick={() => setShowConfirm(false)}
-                className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-4 rounded-2xl active:scale-[0.98] transition-all"
+                className="w-full bg-zinc-900 hover:bg-zinc-800 text-zinc-400 text-xs font-medium py-2.5 rounded-xl transition-colors"
               >
                 Cancelar
               </button>
@@ -374,10 +404,12 @@ export default function ChatPage() {
         </div>
       )}
 
+      {/* SCROLLBAR PERSONALIZADA */}
       <style jsx global>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 3px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #255dacff; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #27272a; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
       `}</style>
     </div>
   );
